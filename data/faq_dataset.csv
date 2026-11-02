@@ -1,0 +1,21 @@
+id,title,content
+1,Resetting Password,"To reset your password, go to the login page and click on 'Forgot Password'."
+2,Account Locked,"If your account is locked, it may be due to multiple failed login attempts."
+3,Subscription Plans,"Our subscription plans include monthly, quarterly, and annual options."
+4,Refund Policy,Refunds are available within 14 days of purchase under specific conditions.
+5,Changing Email,"To change your email, go to settings and update your contact information."
+6,Two-Factor Authentication,Enable 2FA from your account security settings to add an extra layer of protection.
+7,App Installation,You can install our app from the Google Play Store or Apple App Store.
+8,App Crashing Issue,"If your app crashes, try clearing the cache or reinstalling the app."
+9,Delete Account,"To delete your account, navigate to 'Account Settings' and choose 'Delete'."
+10,Update Profile,"You can update your profile picture, bio, and other details from the profile section."
+11,Invoice Request,"To request an invoice, contact billing support with your payment ID."
+12,Change Language,You can change the app language from the settings under 'Language Preferences'.
+13,App Permissions,"Our app requires permissions for location, camera, and storage to function properly."
+14,Reactivating Account,You can reactivate your account by logging in and confirming reactivation.
+15,Contact Support,Reach our support team via the 'Help' section in the app or website.
+16,Manage Notifications,Manage push and email notifications from 'Notification Settings' in your account.
+17,Unsubscribe from Emails,"To unsubscribe from emails, click on the unsubscribe link at the bottom of the email."
+18,Mobile vs Web Features,Some features are exclusive to mobile or web versions due to platform capabilities.
+19,Data Privacy,We value your data privacy and comply with GDPR regulations.
+20,Security Tips,Follow our security tips to keep your account safe from phishing and fraud.
