@@ -37,9 +37,11 @@ Combines **CPU-optimized semantic embeddings** via `sentence-transformers` (`all
 - **Semantic Vector Index (`src/indexer.py`)**: CPU-friendly `all-MiniLM-L6-v2` dense embeddings with unit L2-norm scaling, pickle serialization, and cosine similarity ranking.
 - **Context-Aware Generator (`src/rag_chain.py`)**: Multi-provider support for **Google Gemini** (`gemini-2.0-flash`, `gemini-2.5-flash`) and **OpenAI** (`gpt-4o`, `gpt-4o-mini`). Includes deterministic fallback handling when no relevant context is found.
 - **Interactive Streamlit Demo (`app.py`)**: Full-featured UI featuring:
-  - Multi-LLM provider switcher (Gemini & OpenAI)
+  - Multi-LLM provider switcher (Gemini & OpenAI) with automatic model fallback
+  - Dynamic dataset management: upload custom CSV files or edit data directly in the UI table (add/modify/delete rows)
+  - One-click default dataset restoration
   - Interactive Q&A with predefined customer query presets
-  - Knowledge Base Explorer with live search/filtering
+  - Knowledge Base Explorer with live search/filtering and CSV export
   - Real-time Cosine Similarity & Vector Inspector
 
 ---

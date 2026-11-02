@@ -2,7 +2,7 @@
 Streamlit Demo Application for the Support Response Assistant (RAG Pipeline).
 
 Demonstrates the complete end-to-end RAG workflow:
-  1. Knowledge Base Loading & Validation (CSV via LoadDocuments)
+  1. Knowledge Base Loading & Validation (CSV via LoadDocuments, Upload, or Live In-UI Editor)
   2. CPU-Optimized Semantic Vector Indexing (SentenceTransformers + L2 Normalization via CustomIndex)
   3. Real-Time Cosine Similarity Retrieval (Top-k document matching)
   4. Response Generation with Context Grounding (Google Gemini or OpenAI GPT via RAGChain)
@@ -11,6 +11,7 @@ Demonstrates the complete end-to-end RAG workflow:
 import logging
 import os
 import sys
+import tempfile
 import time
 
 import pandas as pd
@@ -152,6 +153,8 @@ def main():
         st.session_state.last_result = None
     if "discovered_gemini_models" not in st.session_state:
         st.session_state.discovered_gemini_models = []
+    if "is_custom_dataset" not in st.session_state:
+        st.session_state.is_custom_dataset = False
 
     # Auto-load dataset and index on startup if available
     if st.session_state.df is None:
@@ -207,7 +210,6 @@ def main():
                     else:
                         st.sidebar.error("Could not fetch models. Check key.")
 
-        # Default model list prioritizing active production models
         base_models = [
             "gemini-2.0-flash",
             "gemini-2.5-flash",
@@ -218,7 +220,6 @@ def main():
             "Custom...",
         ]
 
-        # If user discovered models via the API, merge them
         if st.session_state.discovered_gemini_models:
             model_options = list(dict.fromkeys(st.session_state.discovered_gemini_models + base_models))
         else:
@@ -274,20 +275,40 @@ def main():
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("4. Vector Index Status")
+    st.sidebar.subheader("4. Dataset & Index Status")
+    if st.session_state.df is not None:
+        source_label = "Custom / Edited" if st.session_state.is_custom_dataset else "Default FAQ"
+        st.sidebar.info(f"📂 Dataset: **{source_label}** ({len(st.session_state.df)} records)")
+    else:
+        st.sidebar.warning("📂 Dataset: Not Loaded")
+
     if st.session_state.index is not None:
         num_docs = len(st.session_state.index.get("ids", []))
-        st.sidebar.success(f"🟢 Index Active: {num_docs} FAQs stored (384-d MiniLM vectors)")
+        st.sidebar.success(f"🟢 Index Active: {num_docs} FAQs stored")
     else:
         st.sidebar.warning("🟡 Index Not Loaded")
 
-    if st.sidebar.button("🔄 Rebuild Vector Index", help="Re-embeds all records and overwrites pickle") and st.session_state.df is not None:
-        with st.sidebar.status("Re-embedding documents with all-MiniLM-L6-v2..."):
-            st.session_state.index, st.session_state.indexer = load_or_create_index(
-                st.session_state.df, force_recreate=True
-            )
-        st.sidebar.success("Index rebuilt successfully!")
-        st.rerun()
+    col_s1, col_s2 = st.sidebar.columns(2)
+    with col_s1:
+        if st.button("🔄 Rebuild Index", help="Re-embeds current dataset and updates vectors") and st.session_state.df is not None:
+            with st.spinner("Re-embedding..."):
+                st.session_state.index, st.session_state.indexer = load_or_create_index(
+                    st.session_state.df, force_recreate=True
+                )
+            st.sidebar.success("Index rebuilt!")
+            st.rerun()
+
+    with col_s2:
+        if st.button("⏪ Reset Default", help="Restores the original 20 FAQ records"):
+            default_df = load_dataset()
+            st.session_state.df = default_df
+            st.session_state.is_custom_dataset = False
+            with st.spinner("Restoring default index..."):
+                st.session_state.index, st.session_state.indexer = load_or_create_index(
+                    default_df, force_recreate=True
+                )
+            st.sidebar.success("Default restored!")
+            st.rerun()
 
     # --------------------------------------------------------------------------
     # Main Window: Title & Navigation Tabs
@@ -299,7 +320,7 @@ def main():
     )
 
     tab_chat, tab_dataset, tab_index = st.tabs(
-        ["💬 Assistant Demo", "📚 Knowledge Base Explorer", "🔍 Vector Index Inspector"]
+        ["💬 Assistant Demo", "📚 Knowledge Base & Data Editor", "🔍 Vector Index Inspector"]
     )
 
     # ==========================================================================
@@ -310,16 +331,23 @@ def main():
 
         with col_presets:
             st.markdown("#### ⚡ Quick Preset Queries")
-            preset_queries = [
-                "How do I reset my password?",
-                "What are the subscription plans?",
-                "How to delete my account?",
-                "Explain data privacy policies.",
-                "How to enable two-factor authentication?",
-                "What should I do if the app crashes?",
-                "Can I get a refund on my purchase?",
-                "What is your company phone number in Tokyo?",  # Out-of-domain test
-            ]
+            # Dynamic preset options based on dataset titles if available
+            if st.session_state.df is not None and len(st.session_state.df) > 0:
+                titles = st.session_state.df["title"].dropna().tolist()
+                sample_titles = titles[:7]
+                preset_queries = [f"How do I handle {t.lower()}?" for t in sample_titles]
+                preset_queries.append("What is your company phone number in Tokyo?")  # Out-of-domain test
+            else:
+                preset_queries = [
+                    "How do I reset my password?",
+                    "What are the subscription plans?",
+                    "How to delete my account?",
+                    "Explain data privacy policies.",
+                    "How to enable two-factor authentication?",
+                    "What should I do if the app crashes?",
+                    "Can I get a refund on my purchase?",
+                    "What is your company phone number in Tokyo?",
+                ]
 
             clicked_preset = None
             for p_query in preset_queries:
@@ -449,37 +477,148 @@ def main():
                     st.code(sample_prompt, language="markdown")
 
     # ==========================================================================
-    # TAB 2: Knowledge Base Explorer
+    # TAB 2: Knowledge Base & Data Editor
     # ==========================================================================
     with tab_dataset:
-        st.markdown("### 📚 Product Documentation & FAQ Dataset")
+        st.markdown("### 📚 Knowledge Base Management & Data Editor")
         st.markdown(
-            "This table contains the SaaS knowledge base loaded and validated by `LoadDocuments`. "
+            "Manage your FAQ dataset by **uploading a CSV file**, **editing data directly in the table**, "
+            "or **restoring the default knowledge base** at any time. "
             "Required columns: `id`, `title`, and `content`."
         )
 
-        col_d1, col_d2, col_d3 = st.columns([1, 1, 1])
+        # Action section: Upload & Restoration
+        with st.expander("📤 Upload CSV or Restore Default Dataset", expanded=False):
+            col_up1, col_up2 = st.columns([2, 1])
+
+            with col_up1:
+                uploaded_file = st.file_uploader(
+                    "Upload a custom FAQ CSV file",
+                    type=["csv"],
+                    help="Must contain columns: id, title, content",
+                )
+                if uploaded_file is not None:
+                    # Validate and parse using LoadDocuments
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+
+                    try:
+                        loader = LoadDocuments()
+                        new_df = loader.load_faq_data(tmp_path)
+                        st.session_state.df = new_df
+                        st.session_state.is_custom_dataset = True
+                        with st.spinner("Indexing uploaded dataset..."):
+                            st.session_state.index, st.session_state.indexer = load_or_create_index(
+                                new_df, force_recreate=True
+                            )
+                        st.success(
+                            f"✅ Successfully loaded and indexed {len(new_df)} FAQ records from '{uploaded_file.name}'!"
+                        )
+                        st.rerun()
+                    except (ValueError, FileNotFoundError, pd.errors.EmptyDataError, OSError, RuntimeError) as err:
+                        st.error(f"Failed to load uploaded file: {err}")
+                    finally:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+
+            with col_up2:
+                st.markdown("**Restore Factory Default**")
+                st.caption("Revert all edits and reload the default 20 SaaS FAQ articles.")
+                if st.button("⏪ Restore Default Dataset", use_container_width=True):
+                    default_df = load_dataset()
+                    st.session_state.df = default_df
+                    st.session_state.is_custom_dataset = False
+                    with st.spinner("Restoring default vector index..."):
+                        st.session_state.index, st.session_state.indexer = load_or_create_index(
+                            default_df, force_recreate=True
+                        )
+                    st.success("Original 20 FAQ articles restored successfully!")
+                    st.rerun()
+
+        st.markdown("---")
+
+        # Metrics display
+        col_d1, col_d2, col_d3 = st.columns(3)
         if st.session_state.df is not None:
             with col_d1:
                 st.metric("Total FAQ Articles", len(st.session_state.df))
             with col_d2:
-                avg_len = int(st.session_state.df["content"].str.len().mean())
+                avg_len = int(st.session_state.df["content"].astype(str).str.len().mean())
                 st.metric("Avg Article Length", f"{avg_len} chars")
             with col_d3:
-                st.metric("Required Columns", "id, title, content ✅")
+                status_label = "Custom / Edited" if st.session_state.is_custom_dataset else "Default Built-In"
+                st.metric("Dataset Source", status_label)
 
-            search_filter = st.text_input("🔍 Filter FAQs by keyword:", placeholder="e.g. password, billing")
-            filtered_df = st.session_state.df
-            if search_filter:
-                filtered_df = st.session_state.df[
-                    st.session_state.df["title"].str.contains(search_filter, case=False, na=False)
-                    | st.session_state.df["content"].str.contains(search_filter, case=False, na=False)
-                ]
+            # In-UI Data Editor
+            st.markdown("#### ✏️ Interactive Data Editor")
+            st.caption(
+                "You can edit cells directly, insert new FAQ rows with the **+** button at the bottom, "
+                "or select and delete rows with Delete/Backspace."
+            )
 
-            st.dataframe(filtered_df, use_container_width=True, height=400)
+            # Let user edit with st.data_editor
+            edited_df = st.data_editor(
+                st.session_state.df,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=420,
+                key="faq_table_editor",
+                column_config={
+                    "id": st.column_config.NumberColumn(
+                        "ID",
+                        help="Unique document ID (numeric)",
+                        required=True,
+                        step=1,
+                    ),
+                    "title": st.column_config.TextColumn(
+                        "Title",
+                        help="FAQ Title or Category name",
+                        required=True,
+                        width="medium",
+                    ),
+                    "content": st.column_config.TextColumn(
+                        "Content (Answer)",
+                        help="The full FAQ text used as context for the assistant",
+                        required=True,
+                        width="large",
+                    ),
+                },
+            )
+
+            col_save1, col_save2, _ = st.columns([1.5, 1.5, 3])
+            with col_save1:
+                if st.button("💾 Save Edits & Rebuild Index", type="primary", use_container_width=True):
+                    # Validation
+                    required_cols = {"id", "title", "content"}
+                    if edited_df is None or edited_df.empty:
+                        st.error("The dataset cannot be empty.")
+                    elif not required_cols.issubset(edited_df.columns):
+                        st.error(f"Missing required columns: {required_cols - set(edited_df.columns)}")
+                    else:
+                        st.session_state.df = edited_df.copy()
+                        st.session_state.is_custom_dataset = True
+                        with st.spinner("Re-embedding edited documents with all-MiniLM-L6-v2..."):
+                            st.session_state.index, st.session_state.indexer = load_or_create_index(
+                                st.session_state.df, force_recreate=True
+                            )
+                        st.success(f"Saved {len(edited_df)} records and updated the vector store!")
+                        st.rerun()
+
+            with col_save2:
+                # CSV Export button
+                csv_bytes = edited_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=csv_bytes,
+                    file_name="faq_dataset_custom.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
         else:
-            st.warning("Dataset not loaded.")
-            if st.button("📂 Load Dataset Now"):
+            st.warning("No dataset loaded.")
+            if st.button("📂 Load Default Dataset"):
                 st.session_state.df = load_dataset()
                 st.rerun()
 
@@ -525,7 +664,7 @@ def main():
                             "Rank": rank,
                             "Title": st.session_state.index["titles"][idx],
                             "Similarity (%)": round(score * 100, 2),
-                            "Content Preview": st.session_state.index["contents"][idx][:80] + "...",
+                            "Content Preview": str(st.session_state.index["contents"][idx])[:80] + "...",
                         }
                     )
                 st.dataframe(pd.DataFrame(ranking_data), use_container_width=True, height=350)
